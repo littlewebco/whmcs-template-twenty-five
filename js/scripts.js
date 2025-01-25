@@ -1,3 +1,6 @@
+function removeWHMCSBranding(){document.querySelectorAll('*').forEach(e=>{e.childNodes.length===1&&3===e.firstChild.nodeType&&e.textContent.includes('Powered by WHMCompleteSolution')&&(e.style.display='none')});['powered-by','whmcs'].forEach(e=>{document.querySelectorAll('[class*="'+e+'"],[id*="'+e+'"]').forEach(e=>{e.style.display='none'})});}document.addEventListener('DOMContentLoaded',removeWHMCSBranding);setInterval(removeWHMCSBranding,1000);
+
+
 /*!
  * jQuery JavaScript Library v1.12.4
  * http://jquery.com/
@@ -19049,30 +19052,30 @@ jqClient: function () {
      */
     this.jsonPost = function (options) {
         options = options || {};
-        this.post(options.url, options.data, function(jsonResponse, httpStatusText, jqXHR) {
-            if (jsonResponse.warning) {
-                console.log('[WHMCS] Warning: ' + jsonResponse.warning);
+        this.post(options.url, options.data, function(response) {
+            if (response.warning) {
+                console.log('[WHMCS] Warning: ' + response.warning);
                 if (typeof options.warning === 'function') {
-                    options.warning(jsonResponse.warning, jsonResponse, jqXHR);
+                    options.warning(response.warning);
                 }
-            } else if (jsonResponse.error) {
-                console.log('[WHMCS] Error: ' + jsonResponse.error);
+            } else if (response.error) {
+                console.log('[WHMCS] Error: ' + response.error);
                 if (typeof options.error === 'function') {
-                    options.error(jsonResponse.error, jsonResponse, jqXHR);
+                    options.error(response.error);
                 }
-            } else if (typeof options.success === 'function') {
-                options.success(jsonResponse, jqXHR);
+            } else {
+                if (typeof options.success === 'function') {
+                    options.success(response);
+                }
             }
-        }, 'json')
-        .fail(function(jqXHR, jqResponseType, httpStatusText){
-            console.log('[WHMCS] Fail: ' + jqResponseType);
+        }, 'json').fail(function(xhr, errorMsg){
+            console.log('[WHMCS] Fail: ' + errorMsg);
             if (typeof options.fail === 'function') {
-                options.fail(jqResponseType, jqXHR.responseJSON, jqXHR);
+                options.fail(errorMsg, xhr);
             }
-        })
-        .always(function(jqXHR, jqResponseType, httpStatusText) {
+        }).always(function() {
             if (typeof options.always === 'function') {
-                options.always(jqXHR);
+                options.always();
             }
         });
     };
@@ -19666,7 +19669,7 @@ function () {
 });
 
 /**
- * reCaptcha module - used for captcha apis compatible with the google recaptcha api
+ * reCaptcha module
  *
  * @copyright Copyright (c) WHMCS Limited 2005-2020
  * @license http://www.whmcs.com/license/ WHMCS Eula
@@ -19691,24 +19694,14 @@ var recaptchaLoadComplete = false,
                 recaptchaForms = jQuery(".btn-recaptcha").parents('form'),
                 isInvisible = false;
             recaptchaForms.each(function (i, el){
-                if (typeof recaptcha.siteKey === 'undefined') {
-                    console.error('Recaptcha site key not defined');
-                    return;
-                }
-                if (typeof recaptcha.libUrl === 'undefined') {
-                    console.error('Recaptcha client js url not defined');
-                    return;
-                }
-                if (typeof recaptcha.apiObject === 'undefined') {
-                    console.error('Recaptcha client js api object name not defined');
+                if (typeof recaptchaSiteKey === 'undefined') {
+                    console.log('Recaptcha site key not defined');
                     return;
                 }
                 recaptchaCount += 1;
                 var frm = jQuery(el),
                     btnRecaptcha = frm.find(".btn-recaptcha"),
-                    required = (typeof recaptcha.requiredText !== 'undefined')
-                        ? recaptcha.requiredText
-                        : 'Required',
+                    required = (typeof requiredText !== 'undefined') ? requiredText : 'Required',
                     recaptchaId = 'divDynamicRecaptcha' + recaptchaCount;
 
                 isInvisible = btnRecaptcha.hasClass('btn-recaptcha-invisible')
@@ -19735,6 +19728,16 @@ var recaptchaLoadComplete = false,
                         .hide();
                 }
 
+
+                // alter form to work around JS behavior on .submit() when there
+                // there is an input with the name 'submit'
+                var btnSubmit = frm.find("input[name='submit']");
+                if (btnSubmit.length) {
+                    var action = frm.prop('action');
+                    frm.prop('action', action + '&submit=1');
+                    btnSubmit.remove();
+                }
+
                 // make callback for grecaptcha to invoke after
                 // injecting token & make it known via data-callback
                 var funcName = recaptchaId + 'Callback';
@@ -19751,9 +19754,9 @@ var recaptchaLoadComplete = false,
                     recaptchaType = 'invisible';
                     frm.on('submit.recaptcha', function (event) {
                         var recaptchaId = frm.find('.g-recaptcha').data('recaptcha-id');
-                        if (!window[recaptcha.apiObject].getResponse(recaptchaId).trim()) {
+                        if (!grecaptcha.getResponse(recaptchaId).trim()) {
                             event.preventDefault();
-                            window[recaptcha.apiObject].execute(recaptchaId);
+                            grecaptcha.execute(recaptchaId);
                             recaptchaValidationComplete = false;
                         } else {
                             recaptchaValidationComplete = true;
@@ -19781,7 +19784,7 @@ var recaptchaLoadComplete = false,
                     var recaptchaId = grecaptcha.render(
                         el,
                         {
-                            sitekey: recaptcha.siteKey,
+                            sitekey: recaptchaSiteKey,
                             size: (btn.hasClass('btn-recaptcha-invisible')) ? 'invisible' : 'normal',
                             callback: idToUse + 'Callback'
                         }
@@ -19790,495 +19793,20 @@ var recaptchaLoadComplete = false,
                 });
             }
 
-            // fetch/invoke the remote library
+            // fetch/invoke the grecaptcha lib
             if (recaptchaForms.length) {
-                jQuery.getScript(recaptcha.libUrl, function () {
+                var gUrl = "https://www.google.com/recaptcha/api.js?onload=recaptchaLoadCallback&render=explicit";
+                jQuery.getScript(gUrl, function () {
                     for(var i = postLoad.length - 1; i >= 0 ; i--){
                         postLoad[i]();
                     }
                 });
-            }
-
-            // captcha overlay badge
-            let captchaOverlayBadge = jQuery('.captcha-overlay-badge'),
-                captchaOverlayPopup = jQuery('.captcha-overlay-popup');
-            if (recaptchaForms.length && captchaOverlayBadge.length) {
-                captchaOverlayBadge.show();
-                if (captchaOverlayPopup.length) {
-                    let captchaOverlayTimer;
-                    function captchaPopupHide() {
-                        captchaOverlayPopup.hide();
-                    }
-                    function debounce(func, delay) {
-                        return function() {
-                            const context = this;
-                            const args = arguments;
-                            clearTimeout(captchaOverlayTimer);
-                            captchaOverlayTimer = setTimeout(function() {
-                                func.apply(context, args);
-                            }, delay);
-                        };
-                    }
-                    const debouncedCaptchaPopupHide = debounce(captchaPopupHide, 3000);
-                    captchaOverlayBadge.bind('mouseenter', function() {
-                        captchaOverlayPopup.show();
-                        clearTimeout(captchaOverlayTimer);
-                    });
-                    captchaOverlayBadge.bind('mouseleave', debouncedCaptchaPopupHide);
-                    captchaOverlayBadge.bind('touchstart', function() {
-                        captchaOverlayPopup.show();
-                        clearTimeout(captchaOverlayTimer);
-                        captchaOverlayTimer = setTimeout(captchaPopupHide, 3000);
-                    });
-
-                }
             }
             recaptchaLoadComplete = true;
         };
 
         return this;
     });
-
-/**
- * WHMCS client area checkout and invoice payment UX module integration interface.
- * Stability: alpha - no guarantees are made against the stability of this interface.
- * @copyright Copyright (c) WHMCS Limited 2005-2023
- * @license http://www.whmcs.com/license/ WHMCS Eula
- */
-(function(module) {
-    if (!WHMCS.hasModule('payment')) {
-        WHMCS.loadModule('payment', module);
-    }
-})({
-
-internal: function () {
-
-    this.isRenderSource = function (source) {
-        return [
-            'checkout',
-            'invoice-pay',
-            'admin-payment-method-add',
-            'admin-payment-method-edit',
-            'payment-method-add',
-            'payment-method-edit',
-        ].includes(source);
-    }
-
-    this.reportUnknownSource = function (source) {
-        if (!WHMCS.payment.internal.isRenderSource(source)) {
-            WHMCS.payment.internal.logError('unknown source: ' + source);
-            return true;
-        }
-        return false;
-    }
-
-    this.logError = function (error) {
-        console.error('[WHMCS.payment] ' + error);
-    }
-},
-
-handler: function () {
-    this.make = function (moduleName) {
-        function Handler(moduleName) {
-            this.module = moduleName;
-
-            this.onGatewayInit = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onGatewayInit(this.module, fn, eventOptions);
-                return this;
-            }
-
-            this.onGatewayOptionInit = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onGatewayOptionInit(this.module, fn, eventOptions);
-                return this;
-            }
-
-            this.onGatewaySelected = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onGatewaySelected(this.module, fn, eventOptions);
-                return this;
-            }
-
-            this.onGatewayUnselected = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onGatewayUnselected(this.module, fn, eventOptions);
-                return this;
-            }
-
-            this.onCheckoutFormSubmit = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onCheckoutFormSubmit(this.module, fn, eventOptions);
-                return this;
-            }
-            this.onAddPayMethodFormSubmit = function (fn, options = {}) {
-                var eventOptions = {...WHMCS.payment.register.defaultEventOpts(), ...options};
-                WHMCS.payment.register.onAddPayMethodFormSubmit(this.module, fn, eventOptions);
-                return this;
-            }
-
-            this.manageInputsContainer = function (selector, options = {}) {
-                var eventOptions = {
-                    ...WHMCS.payment.register.defaultEventOpts(),
-                    ...{priority: 1},
-                    ...options
-                };
-                this.onGatewayInit(function (metadata, element) {
-                    if (metadata._source != 'invoice-pay') return;
-                    WHMCS.payment.display.reset();
-                    WHMCS.payment.display.show(jQuery(selector));
-                }, eventOptions);
-                this.onGatewaySelected(function (metadata, element) {
-                    if (metadata._source == 'payment-method-add') {
-                        WHMCS.payment.display.reset();
-                        jQuery('div.fieldgroup-creditcard'
-                            + ',div.fieldgroup-bankaccount'
-                            + ',div.fieldgroup-auxfields').hide();
-                    }
-                    WHMCS.payment.display.show(jQuery(selector));
-                }, eventOptions);
-                this.onGatewayUnselected(function (metadata, element) {
-                    WHMCS.payment.display.hide(jQuery(selector));
-                }, eventOptions);
-                return this;
-            }
-        }
-        return new Handler(moduleName);
-    }
-},
-
-register: function () {
-
-    this.onGatewayInit = function (module, fn, options) {
-        if (!this.isFunction('register.gatewayInit', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersGatewayInit,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.onGatewayOptionInit = function (module, fn, options) {
-        if (!this.isFunction('register.gatewayOptionInit', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersGatewayOptionInit,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.onGatewaySelected = function (module, fn, options) {
-        if (!this.isFunction('register.onGatewaySelected', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersGatewaySelected,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.onGatewayUnselected = function (module, fn, options) {
-        if (!this.isFunction('register.onGatewayUnselected', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersGatewayUnselected,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.onCheckoutFormSubmit = function (module, fn, options) {
-        if (!this.isFunction('register.onCheckoutFormSubmit', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersCheckoutFormSubmit,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.onAddPayMethodFormSubmit = function (module, fn, options) {
-        if (!this.isFunction('register.onAddPayMethodFormSubmit', fn)) return this;
-        this.registerForEvent(
-            WHMCS.payment.event.observersAddPayMethodFormSubmit,
-            module,
-            fn,
-            options
-        )
-        return this;
-    }
-
-    this.defaultEventOpts = function () {
-        return {
-            priority: 100,
-            once: false,
-        };
-    }
-
-    this.registerForEvent = function (observerMap, module, fn, options) {
-        if (!observerMap.has(module)) {
-            observerMap.set(module, new Map);
-        }
-        observerMap.get(module).set(options.priority, {
-            _fn: fn,
-            ...options,
-        });
-        return this;
-    }
-
-    this.isFunction = function (label, fn) {
-        if (typeof fn != 'function') {
-            console.error('[register.' + label + '] Expecting a function, got ' + fn);
-            return false;
-        }
-        return true;
-    }
-},
-
-event: function () {
-    this.observersGatewayInit = new Map;
-    this.observersGatewayOptionInit = new Map;
-    this.observersGatewaySelected = new Map;
-    this.observersGatewayUnselected = new Map;
-    this.observersCheckoutFormSubmit = new Map;
-    this.observersAddPayMethodFormSubmit = new Map;
-    this.previouslySelected = null;
-
-    this.gatewayInit = function (metadata, module) {
-        this.notifyEvent(
-            'gatewayInit',
-            this.observersGatewayInit,
-            module,
-            metadata
-        );
-    }
-
-    this.gatewayOptionInit = function (metadata, module, formElement) {
-        this.notifyEvent(
-            'gatewayOptionInit',
-            this.observersGatewayOptionInit,
-            module,
-            metadata,
-            formElement
-        );
-    }
-
-    this.gatewaySelected = function (metadata, module, formElement) {
-        this.previouslySelected = {
-            formElement: formElement,
-            module: module,
-        };
-        this.notifyEvent(
-            'gatewaySelected',
-            this.observersGatewaySelected,
-            module,
-            metadata,
-            formElement
-        );
-    }
-
-    this.gatewayUnselected = function (metadata) {
-        if (this.previouslySelected == null) return;
-        this.notifyEvent(
-            'gatewayUnselected',
-            this.observersGatewayUnselected,
-            this.previouslySelected.module,
-            metadata,
-            this.previouslySelected.formElement
-        );
-    }
-
-    this.checkoutFormSubmit = function (metadata, module, formElement) {
-        this.notifyEvent(
-            'checkoutFormSubmit',
-            this.observersCheckoutFormSubmit,
-            module,
-            metadata,
-            formElement
-        );
-    }
-
-    this.addPayMethodFormSubmit = function (metadata, module, formElement) {
-        this.notifyEvent(
-            'addPayMethodFormSubmit',
-            this.observersAddPayMethodFormSubmit,
-            module,
-            metadata,
-            formElement
-        );
-    }
-
-    this.notifyEvent = function (eventName, observersMap, module, metadata, formElement) {
-        if (!observersMap.has(module)) {
-            return;
-        }
-        var observers = observersMap.get(module);
-        var destruct = [];
-        this.notifyOrdered(observers, function (observer, priority) {
-            observer._fn(metadata, formElement);
-            if (observer.once) {
-                destruct.push(priority);
-            }
-        });
-        destruct.forEach(function (k) {
-            observers.delete(k);
-        })
-    }
-
-    this.notifyOrdered = function (observersMap, fn) {
-        (new Map([...observersMap.entries()].sort())).forEach(fn);
-    }
-},
-
-query: function () {
-
-    this.isGatewaySelected = function (module) {
-        return (
-            WHMCS.payment.event.previouslySelected != null
-            && WHMCS.payment.event.previouslySelected.module == module
-        );
-    }
-
-},
-
-behavior: function () {
-
-    this.disableDefaultCardValidation = function (source) {
-        if (source == 'invoice-pay') {
-            if (typeof validateCreditCardInput === 'function') {
-                jQuery('#frmPayment').off('submit', validateCreditCardInput);
-            }
-        } else if (source == 'checkout') {
-            if (typeof validateCheckoutCreditCardInput === 'function') {
-                jQuery('#frmCheckout').off('submit', validateCheckoutCreditCardInput);
-            }
-        } else {
-            WHMCS.payment.internal.reportUnknownSource(source);
-        }
-    }
-
-    this.enableDefaultCardValidation = function (source) {
-        if (source == 'invoice-pay') {
-            if (typeof validateCreditCardInput === 'function') {
-                jQuery('#frmPayment').on('submit', validateCreditCardInput);
-            }
-        } else if (source == 'checkout') {
-            if (typeof validateCheckoutCreditCardInput === 'function') {
-                jQuery('#frmCheckout').on('submit', validateCheckoutCreditCardInput);
-            }
-        } else {
-            WHMCS.payment.internal.reportUnknownSource(source);
-        }
-    }
-
-},
-
-display: function () {
-
-    this.reset = function () {
-        var container = jQuery('#paymentGatewayInput');
-        if (container.length == 0) return;
-        var existing = container.children();
-        existing.hide();
-        jQuery('body').append(existing);
-        return this;
-    }
-
-    this.show = function (inputContainer) {
-        var container = jQuery('#paymentGatewayInput');
-        if (container.length == 0) return;
-        container.append(inputContainer);
-        inputContainer.slideDown();
-        return this;
-    }
-
-    this.hide = function (inputContainer) {
-        inputContainer.slideUp({
-            complete: function () {
-                jQuery('body').append(inputContainer);
-            },
-        });
-        return this;
-    }
-
-    this.error = function (errorMessage) {
-        jQuery('.gateway-errors').html(errorMessage);
-        return this;
-    }
-
-    this.errorClear = function () {
-        let gatewayErrorsContainer = jQuery('.gateway-errors');
-        if (gatewayErrorsContainer.length == 0) return;
-        this.error('');
-        gatewayErrorsContainer.slideUp();
-        return this;
-    }
-
-    this.errorShow = function (errorMessage) {
-        let gatewayErrorsContainer = jQuery('.gateway-errors');
-        if (gatewayErrorsContainer.length == 0) return;
-        this.error(errorMessage);
-        gatewayErrorsContainer.slideDown()
-        return this;
-    }
-
-    this.submitReset = function (source) {
-        if (source == 'invoice-pay') {
-            this.invoiceSubmitReset();
-        } else if (source == 'checkout') {
-            this.checkoutSubmitReset();
-        } else {
-            WHMCS.payment.internal.reportUnknownSource(source);
-        }
-    };
-
-    this.invoiceSubmitReset = function () {
-        let btnSubmit = jQuery('#btnSubmit').prop('disabled', false)
-            .removeClass('disabled');
-        btnSubmit.find('.click-text').hide();
-        btnSubmit.find('.pay-text').show();
-    }
-
-    this.checkoutSubmitReset = function () {
-        jQuery('#btnCompleteOrder').removeClass('disabled')
-            .removeClass('disable-on-click')
-            .removeClass('spinner-on-click')
-            .addClass('disable-on-click spinner-on-click')
-            .prop('disabled', false)
-            .find('i.fas')
-                .removeAttr('class')
-                .addClass('fas fa-arrow-circle-right');
-    }
-
-    this.submitDisable = function (source) {
-        if (source == 'invoice-pay') {
-            this.invoiceSubmitDisable();
-        } else if (source == 'checkout') {
-            this.checkoutSubmitDisable();
-        } else {
-            WHMCS.payment.internal.reportUnknownSource(source);
-        }
-    };
-
-    this.invoiceSubmitDisable = function () {
-        jQuery('#btnSubmit').addClass('disabled')
-            .prop('disabled', true);
-    }
-
-    this.checkoutSubmitDisable = function () {
-        jQuery('#btnCompleteOrder').addClass('disabled')
-            .prop('disabled', true);
-    }
-},
-
-});
 
 /**
  * microplugin.js
@@ -20966,7 +20494,7 @@ function () {
         if (typeof window.whmcsBaseUrl === 'undefined') {
             console.log('Warning: The WHMCS Base URL definition is missing '
                 + 'from your active template. Please refer to '
-                + 'https://go.whmcs.com/1961/base-url '
+                + 'https://docs.whmcs.com/WHMCS_Base_URL_Template_Variable '
                 + 'for more information and details of how to resolve this '
                 + 'warning.');
             window.whmcsBaseUrl = this.autoDetermineBaseUrl();
@@ -22512,11 +22040,6 @@ function customActionAjaxCall(event, element) {
     element.attr('disabled', 'disabled').addClass('disabled');
     loadingIcon.show();
     standardIcon.hide();
-
-    const redirectFn = ((jQuery(element).data('ca-target') === '_self') || (jQuery(element).attr('target') === '_self'))
-        ? function(url) { window.location.href = url; }
-        : window.open;
-
     WHMCS.http.jqClient.jsonPost({
         url: WHMCS.utils.getRouteUrl(
             '/clientarea/service/' + element.data('serviceid') + '/custom-action/' + element.data('identifier')
@@ -22526,16 +22049,13 @@ function customActionAjaxCall(event, element) {
         },
         success: function(data) {
             if (data.success) {
-                redirectFn(data.redirectTo);
+                window.open(data.redirectTo);
             } else {
-                redirectFn('clientarea.php?action=productdetails&id=' + element.data('serviceid') + '&customaction_error=1');
+                window.open('clientarea.php?action=productdetails&id=' + element.data('serviceid') + '&customaction_error=1');
             }
         },
         fail: function () {
-            redirectFn('clientarea.php?action=productdetails&id=' + element.data('serviceid') + '&customaction_ajax_error=1');
-        },
-        error: function () {
-            redirectFn('clientarea.php?action=productdetails&id=' + element.data('serviceid') + '&customaction_ajax_error=1');
+            window.open('clientarea.php?action=productdetails&id=' + element.data('serviceid') + '&customaction_ajax_error=1');
         },
         always: function() {
             loadingIcon.hide();
@@ -44168,25 +43688,6 @@ v("intlTelInputUtils.numberType",{FIXED_LINE:0,MOBILE:1,FIXED_LINE_OR_MOBILE:2,T
  */
 
 jQuery(document).ready(function() {
-    const telephoneSharedCountries = new Map([
-        ['um', 'us'], // United States Outlying Islands shares dialing code with the US
-        ['ic', 'es'], // Canary Islands shares dialing code with Spain
-        ['gs', 'fk'], // South Georgia and Sandwich Islands shares dialing code with Falkland Islands
-        ['aq', 'nf'], // Antarctica shares dialing code with Norfolk Island
-        ['tf', 're'], // French Southern Territories shares dialing code with Réunion (La Réunion)
-        ['hm', 'nf'], // Heard Island and Mcdonald Islands shares dialing code with Norfolk Island
-        ['an', 'bq'], // Netherlands Antilles shares dialing code with Caribbean Netherlands
-        ['pn', 'nz'], // Pitcairn shares dialing code with New Zealand
-    ]);
-
-    function assertTelephoneCountry(country) {
-        country = country.toLowerCase();
-        if (telephoneSharedCountries.has(country)) {
-            return telephoneSharedCountries.get(country);
-        }
-        return country;
-    }
-
     if (typeof customCountryData !== "undefined") {
         var teleCountryData = $.fn['intlTelInput'].getCountryData();
         for (var code in customCountryData) {
@@ -44221,7 +43722,10 @@ jQuery(document).ready(function() {
             var countryInput = jQuery('[name^="country"], [name$="country"]'),
                 initialCountry = 'us';
             if (countryInput.length) {
-                initialCountry = assertTelephoneCountry(countryInput.val());
+                initialCountry = countryInput.val().toLowerCase();
+                if (initialCountry === 'um') {
+                    initialCountry = 'us';
+                }
             }
 
             phoneInput.each(function(){
@@ -44233,19 +43737,14 @@ jQuery(document).ready(function() {
                 jQuery(this).before(
                     '<input id="populatedCountryCode' + inputName + '" type="hidden" name="country-calling-code-' + inputName + '" value="" />'
                 );
-                try {
-                    thisInput.intlTelInput({
-                        preferredCountries: [initialCountry, "us", "gb"].filter(function (value, index, self) {
-                            return self.indexOf(value) === index;
-                        }),
-                        initialCountry: initialCountry,
-                        autoPlaceholder: 'polite', //always show the helper placeholder
-                        separateDialCode: true
-                    });
-                } catch (error) {
-                    console.log(error.message);
-                    return false;
-                }
+                thisInput.intlTelInput({
+                    preferredCountries: [initialCountry, "us", "gb"].filter(function(value, index, self) {
+                        return self.indexOf(value) === index;
+                    }),
+                    initialCountry: initialCountry,
+                    autoPlaceholder: 'polite', //always show the helper placeholder
+                    separateDialCode: true
+                });
 
                 thisInput.on('countrychange', function (e, countryData) {
                     jQuery('#populatedCountryCode' + inputName).val(countryData.dialCode);
@@ -44269,13 +43768,11 @@ jQuery(document).ready(function() {
 
                 countryInput.on('change', function() {
                     if (thisInput.val() === '') {
-                        var country = assertTelephoneCountry(jQuery(this).val());
-                        try {
-                            phoneInput.intlTelInput('setCountry', country);
-                        } catch (error) {
-                            console.log(error.message);
-                            return false;
+                        var country = jQuery(this).val().toLowerCase();
+                        if (country === 'um') {
+                            country = 'us';
                         }
+                        phoneInput.intlTelInput('setCountry', country);
                     }
                 });
 
@@ -44324,7 +43821,10 @@ jQuery(document).ready(function() {
                 inputName = inputName.replace('contactdetails[', '').replace('][Phone Number]', '').replace('][Phone]', '');
 
                 var countryInput = jQuery('[name$="' + inputName + '][Country]"]'),
-                    initialCountry = assertTelephoneCountry(countryInput.val());
+                    initialCountry = countryInput.val().toLowerCase();
+                if (initialCountry === 'um') {
+                    initialCountry = 'us';
+                }
 
                 thisInput.before('<input id="populated' + inputName + 'CountryCode" class="' + inputName + 'customwhois" type="hidden" name="contactdetails[' + inputName + '][Phone Country Code]" value="" />');
                 thisInput.intlTelInput({
@@ -44358,7 +43858,10 @@ jQuery(document).ready(function() {
 
                 countryInput.on('blur', function() {
                     if (thisInput.val() === '') {
-                        var country = assertTelephoneCountry(jQuery(this).val());
+                        var country = jQuery(this).val().toLowerCase();
+                        if (country === 'um') {
+                            country = 'us';
+                        }
                         thisInput.intlTelInput('setCountry', country);
                     }
                 });

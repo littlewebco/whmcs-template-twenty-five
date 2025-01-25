@@ -62,7 +62,6 @@
                     {lang key='pleasewait'}
                 </div>
             </div>
-            <div id="paymentGatewayInput"></div>
             <div class="fieldgroup-creditcard{if $editMode && !$payMethod->isCreditCard() || $paymentMethodType == 'bankacct' || $remoteUpdate} w-hidden{/if}">
                 <div class="cc-details">
                     <div class="form-group row">
@@ -313,7 +312,6 @@
 
 <script src="{$BASE_PATH_JS}/jquery.payment.js"></script>
 <script>
-    var paymentInitSingleton = new Map;
     jQuery(document).ready(function() {
         var ccNumberFieldEnabled = '{$creditCardNumberFieldEnabled}',
             ccExpiryFieldEnabled = '{$creditCardExpiryFieldEnabled}',
@@ -338,9 +336,6 @@
                     jQuery('#billingContactsContainer').html(response);
                 }
             });
-        };
-        var whmcsPaymentModuleMetadata = {
-            _source: 'payment-method-add',
         };
 
         jQuery(document).on('click', '.frm-credit-card-input button[type="submit"]', function(e) {
@@ -395,29 +390,20 @@
                     e.preventDefault();
                 }
             }
-            WHMCS.payment.event.addPayMethodFormSubmit(
-                {literal}{...whmcsPaymentModuleMetadata, ...{event: e}}{/literal},
-                WHMCS.payment.event.previouslySelected?.module,
-                jQuery(this)
-            );
         });
 
         jQuery('input[name="type"]').on('ifChecked', function(e) {
-            var element = jQuery(this);
-            var module = element.data('gateway');
-            WHMCS.payment.event.gatewayUnselected(whmcsPaymentModuleMetadata);
-            WHMCS.payment.display.errorClear();
             jQuery('.fieldgroup-creditcard').hide();
             jQuery('.fieldgroup-bankaccount').hide();
             jQuery('.fieldgroup-remoteinput').hide();
             jQuery('.fieldgroup-auxfields').hide();
             jQuery('.fieldgroup-loading').show();
             jQuery('#tokenGatewayAssistedOutput').html('');
-            if (element.data('tokenised') === true) {
-                jQuery('#inputPaymentMethod').val(module);
+            if (jQuery(this).data('tokenised') === true) {
+                jQuery('#inputPaymentMethod').val(jQuery(this).data('gateway'));
                 WHMCS.http.jqClient.jsonPost({
                     url: "{routePath('account-paymentmethods-inittoken')}",
-                    data: 'gateway=' + module,
+                    data: 'gateway=' + jQuery(this).data('gateway'),
                     success: function(response) {
                         jQuery('.fieldgroup-loading').hide();
                         if (response.remoteInputForm) {
@@ -428,12 +414,6 @@
                         } else if (response.assistedOutput) {
                             jQuery('.fieldgroup-creditcard').show('fast', function () {
                                 jQuery('#tokenGatewayAssistedOutput').html(response.assistedOutput);
-                                if (!paymentInitSingleton.has(module)) {
-                                    WHMCS.payment.event.gatewayInit(whmcsPaymentModuleMetadata, module, element);
-                                    WHMCS.payment.event.gatewayOptionInit(whmcsPaymentModuleMetadata, module, element);
-                                    paymentInitSingleton.set(module, true);
-                                }
-                                WHMCS.payment.event.gatewaySelected(whmcsPaymentModuleMetadata, module, element);
                             });
                             jQuery('.fieldgroup-auxfields').show();
                         } else if (response.gatewayType === 'Bank') {
@@ -446,7 +426,7 @@
                         }
                     },
                 });
-            } else if (element.val() === 'bankacct') {
+            } else if (jQuery(this).val() === 'bankacct') {
                 jQuery('.fieldgroup-loading').hide();
                 jQuery('.fieldgroup-bankaccount').show();
                 jQuery('.fieldgroup-auxfields').show();
